@@ -1,0 +1,96 @@
+{
+  "summary": {
+    "features": 5000,
+    "calibration_method": "sigmoid (prefit on validation split)"
+  },
+  "models": {
+    "Naive Bayes": {
+      "validation": {
+        "accuracy": 0.8381,
+        "precision": 0.8426,
+        "recall": 0.8381,
+        "f1": 0.8376,
+        "log_loss": 0.3649,
+        "brier_score": 0.1154
+      },
+      "test_calibrated": {
+        "accuracy": 0.8573,
+        "precision": 0.8576,
+        "recall": 0.8573,
+        "f1": 0.8573,
+        "log_loss": 0.3501,
+        "brier_score": 0.1076
+      },
+      "calibration_gain": {
+        "log_loss_delta": 0.0149,
+        "brier_delta": 0.0078
+      }
+    },
+    "Random Forest": {
+      "validation": {
+        "accuracy": 0.8546,
+        "precision": 0.8546,
+        "recall": 0.8546,
+        "f1": 0.8546,
+        "log_loss": 0.493,
+        "brier_score": 0.155
+      },
+      "test_calibrated": {
+        "accuracy": 0.844,
+        "precision": 0.844,
+        "recall": 0.844,
+        "f1": 0.844,
+        "log_loss": 0.3496,
+        "brier_score": 0.1108
+      },
+      "calibration_gain": {
+        "log_loss_delta": 0.1434,
+        "brier_delta": 0.0442
+      }
+    },
+    "Logistic Regression": {
+      "validation": {
+        "accuracy": 0.9112,
+        "precision": 0.9112,
+        "recall": 0.9112,
+        "f1": 0.9112,
+        "log_loss": 0.2911,
+        "brier_score": 0.0813
+      },
+      "test_calibrated": {
+        "accuracy": 0.8939,
+        "precision": 0.8941,
+        "recall": 0.8939,
+        "f1": 0.8938,
+        "log_loss": 0.2633,
+        "brier_score": 0.0781
+      },
+      "calibration_gain": {
+        "log_loss_delta": 0.0279,
+        "brier_delta": 0.0032
+      }
+    },
+    "SVM": {
+      "validation": {
+        "accuracy": 0.9155,
+        "precision": 0.9155,
+        "recall": 0.9155,
+        "f1": 0.9155,
+        "log_loss": 3.0467,
+        "brier_score": 0.0845
+      },
+      "test_calibrated": {
+        "accuracy": 0.9024,
+        "precision": 0.9028,
+        "recall": 0.9024,
+        "f1": 0.9024,
+        "log_loss": 0.2599,
+        "brier_score": 0.0751
+      },
+      "calibration_gain": {
+        "log_loss_delta": 2.7868,
+        "brier_delta": 0.0094
+      }
+    }
+  }
+}
