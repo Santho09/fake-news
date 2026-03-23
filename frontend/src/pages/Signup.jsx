@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 
 export default function Signup() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("user");
   const [adminCode, setAdminCode] = useState("");
@@ -18,6 +19,7 @@ export default function Signup() {
     try {
       const payload = {
         username,
+        email,
         password,
         role,
         admin_code: adminCode,
@@ -42,6 +44,11 @@ export default function Signup() {
   return (
     <div className="page">
       <div className="authCard">
+        <div className="authBackRow">
+          <Link to="/home" className="authBackLink">
+            ← Home
+          </Link>
+        </div>
         <h1 className="title">Create Account</h1>
         <p className="subtitle">Register as user or (optionally) admin.</p>
 
@@ -63,6 +70,16 @@ export default function Signup() {
             placeholder="Your password"
             type="password"
             autoComplete="new-password"
+          />
+
+          <label className="label">Email</label>
+          <input
+            className="input"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="e.g., user@example.com"
+            type="email"
+            autoComplete="email"
           />
 
           <div className="row">
@@ -88,7 +105,7 @@ export default function Signup() {
 
           {error ? <div className="errorBox">{error}</div> : null}
 
-          <button className="btn" type="submit" disabled={loading}>
+          <button className="btn" type="submit" disabled={loading || !username.trim() || !email.trim() || !password}>
             {loading ? "Creating..." : "Create account"}
           </button>
 

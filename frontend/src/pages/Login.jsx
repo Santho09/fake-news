@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 
 export default function Login() {
@@ -33,6 +33,11 @@ export default function Login() {
   return (
     <div className="page">
       <div className="authCard">
+        <div className="authBackRow">
+          <Link to="/home" className="authBackLink">
+            ← Home
+          </Link>
+        </div>
         <h1 className="title">NewsVeritas</h1>
         <p className="subtitle">Sign in to verify news with human-readable clarity.</p>
 
@@ -64,6 +69,9 @@ export default function Login() {
 
           <div className="hint">
             No account? <a href="/signup">Create one</a>
+          </div>
+          <div className="hint">
+            Forgot password? <a href="/forgot-password">Reset it</a>
           </div>
         </form>
       </div>

@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import {
   ArcElement,
@@ -27,7 +28,69 @@ function VerdictBadge({ verdict, color }) {
   );
 }
 
-function ExplanationBlock({ explanation }) {
+function HighlightedText({ text, spans, verdict }) {
+  if (!text) return null;
+  if (!spans?.length) {
+    return (
+      <div className="highlightedTextBlock" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {text}
+      </div>
+    );
+  }
+  const parts = [];
+  let lastEnd = 0;
+  spans
+    .slice()
+    .sort((a, b) => a.start - b.start)
+    .forEach((s) => {
+      if (s.start > lastEnd) {
+        parts.push({ type: "plain", text: text.slice(lastEnd, s.start) });
+      }
+      parts.push({
+        type: "highlight",
+        text: text.slice(s.start, s.end),
+        spanType: s.type,
+        keyword: s.keyword,
+      });
+      lastEnd = Math.max(lastEnd, s.end);
+    });
+  if (lastEnd < text.length) {
+    parts.push({ type: "plain", text: text.slice(lastEnd) });
+  }
+  return (
+    <div className="highlightedTextBlock" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word", lineHeight: 1.6 }}>
+      {parts.map((p, i) =>
+        p.type === "plain" ? (
+          <span key={i}>{p.text}</span>
+        ) : (
+          <mark
+            key={i}
+            className={p.spanType === "fake" ? "highlightFake" : "highlightReal"}
+            title={p.keyword ? `Model keyword: ${p.keyword}` : ""}
+          >
+            {p.text}
+          </mark>
+        )
+      )}
+    </div>
+  );
+}
+
+function WhySentence({ verdict, whySentence }) {
+  if (!whySentence) return null;
+  const isFake = verdict === "FAKE NEWS";
+  const isUncertain = verdict === "UNCERTAIN";
+  const label = isFake ? "Why FAKE?" : isUncertain ? "Why UNCERTAIN?" : "Why REAL?";
+  const boxClass = isFake ? "whyFake" : isUncertain ? "whyUncertain" : "whyReal";
+  return (
+    <div className={`whySentenceBox ${boxClass}`}>
+      <div className="whySentenceLabel">{label}</div>
+      <div className="whySentenceText">{whySentence}</div>
+    </div>
+  );
+}
+
+function ExplanationBlock({ explanation, analyzedText, verdict }) {
   if (!explanation) return null;
 
   const summary = explanation.summary || {};
@@ -37,16 +100,38 @@ function ExplanationBlock({ explanation }) {
 
   const fakeDrivers = explanation.model_keyword_evidence?.fake_drivers || [];
   const realDrivers = explanation.model_keyword_evidence?.real_drivers || [];
-  const verdict = summary?.verdict || "UNKNOWN";
+  const v = verdict || summary?.verdict || "UNKNOWN";
   const confidence = summary?.confidence;
   const narrative = summary?.narrative;
   const fakeKeywordCount = fakeDrivers.length;
   const realKeywordCount = realDrivers.length;
   const modelLeansReal = realKeywordCount >= fakeKeywordCount;
+  const whySentence = explanation.why_sentence;
+  const highlightedSpans = explanation.highlighted_spans || [];
+  const shap = explanation.shap_attribution || {};
+  const shapFake = shap.toward_fake || [];
+  const shapReal = shap.toward_real || [];
 
   return (
     <div className="card">
       <div className="cardTitle">Why this verdict was given</div>
+
+      {whySentence ? <WhySentence verdict={v} whySentence={whySentence} /> : null}
+
+      {analyzedText ? (
+        <div className="section">
+          <div className="sectionLabel">Words that influenced this verdict</div>
+          <div className="highlightLegend">
+            <span className="legendItem">
+              <mark className="highlightFake legendMark" /> Fake-leaning
+            </span>
+            <span className="legendItem">
+              <mark className="highlightReal legendMark" /> Real-leaning
+            </span>
+          </div>
+          <HighlightedText text={analyzedText} spans={highlightedSpans} verdict={v} />
+        </div>
+      ) : null}
 
       <div className="section">
         <div className="sectionLabel">Simple explanation</div>
@@ -55,7 +140,7 @@ function ExplanationBlock({ explanation }) {
             narrative
           ) : (
             <>
-              This article is currently judged as <b>{verdict}</b>
+              This article is currently judged as <b>{v}</b>
               {typeof confidence === "number" ? (
                 <>
                   {" "}
@@ -154,12 +239,68 @@ function ExplanationBlock({ explanation }) {
           Note: technical keywords are stemmed machine features and may look shortened.
         </div>
       </div>
+
+      <div className="section">
+        <div className="sectionLabel">SHAP attribution (Logistic Regression)</div>
+        {shap.available ? (
+          <>
+            <p className="smallNote" style={{ marginTop: 0 }}>
+              Game-theoretic feature contributions toward fake vs real (LinearExplainer). {shap.note || ""}
+            </p>
+            <div className="grid2" style={{ marginTop: "10px" }}>
+              <div className="miniCard">
+                <div className="miniTitle">SHAP → fake (higher risk)</div>
+                {shapFake.length ? (
+                  <ul className="list">
+                    {shapFake.map((row, i) => (
+                      <li key={i}>
+                        <b>{row.feature}</b>{" "}
+                        <span className="muted">
+                          ({row.shap > 0 ? "+" : ""}
+                          {row.shap})
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="muted">No strong fake-leaning terms in this text.</div>
+                )}
+              </div>
+              <div className="miniCard">
+                <div className="miniTitle">SHAP → real (lower risk)</div>
+                {shapReal.length ? (
+                  <ul className="list">
+                    {shapReal.map((row, i) => (
+                      <li key={i}>
+                        <b>{row.feature}</b>{" "}
+                        <span className="muted">({row.shap})</span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="muted">No strong real-leaning terms in this text.</div>
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="muted">
+            {shap.reason ||
+              "SHAP is not available. Run `python -m backend.build_shap_background` after training, or retrain so shap_background.joblib is created."}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 function ExplainabilityCharts({ result, explanation }) {
   if (!result) return null;
+  const isLightTheme =
+    typeof document !== "undefined" && document.body.getAttribute("data-theme") === "light";
+  const chartLegendColor = isLightTheme ? "#14081f" : "rgba(255,255,255,0.85)";
+  const chartTickColor = isLightTheme ? "#3e2860" : "rgba(255,255,255,0.75)";
+  const chartGridColor = isLightTheme ? "rgba(20,8,31,0.16)" : "rgba(255,255,255,0.08)";
 
   const individual = result?.individual_results || {};
   const modelNames = Object.keys(individual);
@@ -268,18 +409,18 @@ function ExplainabilityCharts({ result, explanation }) {
     maintainAspectRatio: false,
     plugins: {
       legend: {
-        labels: { color: "rgba(255,255,255,0.85)" },
+        labels: { color: chartLegendColor },
       },
     },
     scales: {
       x: {
-        ticks: { color: "rgba(255,255,255,0.75)" },
-        grid: { color: "rgba(255,255,255,0.08)" },
+        ticks: { color: chartTickColor },
+        grid: { color: chartGridColor },
       },
       y: {
         beginAtZero: true,
-        ticks: { color: "rgba(255,255,255,0.75)" },
-        grid: { color: "rgba(255,255,255,0.08)" },
+        ticks: { color: chartTickColor },
+        grid: { color: chartGridColor },
       },
     },
   };
@@ -304,7 +445,7 @@ function ExplainabilityCharts({ result, explanation }) {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                  legend: { labels: { color: "rgba(255,255,255,0.85)" } },
+                  legend: { labels: { color: chartLegendColor } },
                 },
               }}
             />
@@ -329,14 +470,28 @@ function ExplainabilityCharts({ result, explanation }) {
   );
 }
 
+const INPUT_TYPES = [
+  { id: "text", label: "Text", desc: "Paste article" },
+  { id: "url", label: "URL", desc: "Fetch from link" },
+  { id: "youtube", label: "YouTube", desc: "Video title & desc" },
+  { id: "rss", label: "RSS", desc: "Latest from feed" },
+  { id: "file", label: "File", desc: "Upload .txt" },
+];
+
 export default function UserDashboard() {
+  const [inputType, setInputType] = useState("text");
   const [text, setText] = useState("");
+  const [url, setUrl] = useState("");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
+  const [rssUrl, setRssUrl] = useState("");
+  const [file, setFile] = useState(null);
   const [factCheckMode, setFactCheckMode] = useState("wikipedia");
 
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const fileInputRef = useRef(null);
 
   const fetchHistory = async () => {
     const res = await api.get("/api/history");
@@ -352,9 +507,28 @@ export default function UserDashboard() {
     setError("");
     setLoading(true);
     try {
-      const res = await api.post("/api/predict", { text, fact_check_mode: factCheckMode });
+      let res;
+      if (inputType === "file" && file) {
+        const fd = new FormData();
+        fd.append("file", file);
+        fd.append("fact_check_mode", factCheckMode);
+        res = await api.post("/api/predict", fd);
+      } else if (inputType === "url" && url.trim()) {
+        res = await api.post("/api/predict", { url: url.trim(), fact_check_mode: factCheckMode });
+      } else if (inputType === "youtube" && youtubeUrl.trim()) {
+        res = await api.post("/api/predict", { youtube_url: youtubeUrl.trim(), fact_check_mode: factCheckMode });
+      } else if (inputType === "rss" && rssUrl.trim()) {
+        res = await api.post("/api/predict", { rss_url: rssUrl.trim(), fact_check_mode: factCheckMode });
+      } else {
+        res = await api.post("/api/predict", { text: text.trim(), fact_check_mode: factCheckMode });
+      }
       setResult(res.data);
       setText("");
+      setUrl("");
+      setYoutubeUrl("");
+      setRssUrl("");
+      setFile(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
       await fetchHistory();
     } catch (err) {
       setError(err?.response?.data?.error || "Prediction failed");
@@ -378,6 +552,9 @@ export default function UserDashboard() {
           </div>
         </div>
         <div className="topActions">
+          <Link to="/home" className="btnSecondary" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+            Home
+          </Link>
           <button
             className="btnSecondary"
             onClick={() => {
@@ -395,15 +572,86 @@ export default function UserDashboard() {
         <div className="mainCol">
           <div className="card">
             <div className="cardTitle">Check a news article</div>
+            <p className="inputTypeHint">System supports text, article URL, YouTube video, RSS feed, and .txt upload.</p>
+            <div className="inputTypeTabs">
+              {INPUT_TYPES.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  className={`inputTypeTab ${inputType === t.id ? "active" : ""}`}
+                  onClick={() => setInputType(t.id)}
+                >
+                  <span className="tabLabel">{t.label}</span>
+                  <span className="tabDesc">{t.desc}</span>
+                </button>
+              ))}
+            </div>
             <form onSubmit={submit}>
-              <label className="label">Article text</label>
-              <textarea
-                className="textarea"
-                rows={8}
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Paste the full news text here…"
-              />
+              {inputType === "text" ? (
+                <>
+                  <label className="label">Article text</label>
+                  <textarea
+                    className="textarea"
+                    rows={8}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    placeholder="Paste the full news text here…"
+                  />
+                </>
+              ) : inputType === "url" ? (
+                <>
+                  <label className="label">Article URL</label>
+                  <input
+                    type="url"
+                    className="input"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    placeholder="https://example.com/article…"
+                  />
+                  <p className="smallNote">We will fetch the article content from this URL.</p>
+                </>
+              ) : inputType === "youtube" ? (
+                <>
+                  <label className="label">YouTube video URL</label>
+                  <input
+                    type="url"
+                    className="input"
+                    value={youtubeUrl}
+                    onChange={(e) => setYoutubeUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=…"
+                  />
+                  <p className="smallNote">
+                    We analyze the video <b>title and description</b> via YouTube Data API. Requires YOUTUBE_API_KEY.
+                  </p>
+                </>
+              ) : inputType === "rss" ? (
+                <>
+                  <label className="label">RSS or Atom feed URL</label>
+                  <input
+                    type="url"
+                    className="input"
+                    value={rssUrl}
+                    onChange={(e) => setRssUrl(e.target.value)}
+                    placeholder="https://feeds.bbci.co.uk/news/rss.xml"
+                  />
+                  <p className="smallNote">
+                    We use the <b>latest</b> item in the feed: fetch its article page when possible, otherwise the feed
+                    summary.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <label className="label">Upload .txt file</label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".txt"
+                    className="fileInput"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  />
+                  {file ? <p className="smallNote">Selected: {file.name}</p> : null}
+                </>
+              )}
 
               <div className="row">
                 <div className="col">
@@ -421,7 +669,17 @@ export default function UserDashboard() {
 
               {error ? <div className="errorBox">{error}</div> : null}
 
-              <button className="btn" disabled={loading}>
+              <button
+                className="btn"
+                disabled={
+                  loading ||
+                  (inputType === "text" && !text.trim()) ||
+                  (inputType === "url" && !url.trim()) ||
+                  (inputType === "youtube" && !youtubeUrl.trim()) ||
+                  (inputType === "rss" && !rssUrl.trim()) ||
+                  (inputType === "file" && !file)
+                }
+              >
                 {loading ? "Analyzing…" : "Analyze"}
               </button>
             </form>
@@ -436,6 +694,46 @@ export default function UserDashboard() {
                   Confidence: <b>{typeof confidence === "number" ? confidence : "—"}%</b>
                 </div>
               </div>
+              {result?.input_meta?.input_type === "rss" ? (
+                <div className="muted" style={{ marginTop: "10px", lineHeight: 1.5 }}>
+                  <div className="sectionLabel" style={{ marginBottom: "4px" }}>
+                    Source (RSS)
+                  </div>
+                  {result.input_meta.feed_title ? <div>Feed: {result.input_meta.feed_title}</div> : null}
+                  {result.input_meta.item_title ? <div>Item: {result.input_meta.item_title}</div> : null}
+                  {result.input_meta.item_link ? (
+                    <div>
+                      Link:{" "}
+                      <a href={result.input_meta.item_link} target="_blank" rel="noopener noreferrer">
+                        {result.input_meta.item_link}
+                      </a>
+                    </div>
+                  ) : null}
+                  {result.input_meta.text_source ? (
+                    <div>Text from: {result.input_meta.text_source === "feed_summary" ? "feed summary" : "article page"}</div>
+                  ) : null}
+                </div>
+              ) : result?.input_meta?.input_type === "youtube" ? (
+                <div className="muted" style={{ marginTop: "10px", lineHeight: 1.5 }}>
+                  <div className="sectionLabel" style={{ marginBottom: "4px" }}>
+                    Source (YouTube)
+                  </div>
+                  {result.input_meta.video_title ? <div>Title: {result.input_meta.video_title}</div> : null}
+                  {result.input_meta.channel_title ? <div>Channel: {result.input_meta.channel_title}</div> : null}
+                  {result.input_meta.video_id ? (
+                    <div>
+                      Video:{" "}
+                      <a
+                        href={`https://www.youtube.com/watch?v=${result.input_meta.video_id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        youtube.com/watch?v={result.input_meta.video_id}
+                      </a>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <div className="muted">
                 Ensemble decision: {result?.decision_type} (Fake votes: {result?.fake_votes}, Real votes:{" "}
                 {result?.real_votes})
@@ -470,7 +768,11 @@ export default function UserDashboard() {
           ) : null}
 
           <ExplainabilityCharts result={result} explanation={result?.explanation} />
-          <ExplanationBlock explanation={result?.explanation} />
+          <ExplanationBlock
+            explanation={result?.explanation}
+            analyzedText={result?.analyzed_text}
+            verdict={verdict}
+          />
         </div>
 
         <aside className="sideCol">
@@ -499,6 +801,8 @@ export default function UserDashboard() {
                           real_votes: h.real_votes,
                           individual_results: h.individual_results,
                           explanation: h.explanation,
+                          analyzed_text: h.text,
+                          input_meta: h.input_meta,
                         });
                       }}
                     >

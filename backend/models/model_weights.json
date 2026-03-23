@@ -1,6 +1,6 @@
 {
-  "Naive Bayes": 0.245113,
-  "Random Forest": 0.241312,
-  "Logistic Regression": 0.255559,
-  "SVM": 0.258016
+  "Naive Bayes": 0.242126,
+  "Random Forest": 0.246053,
+  "Logistic Regression": 0.256461,
+  "SVM": 0.255361
 }

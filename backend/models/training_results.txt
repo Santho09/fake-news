@@ -1,8 +1,13 @@
 FAKE NEWS DETECTION - MODEL TRAINING RESULTS
 ================================================================================
 
+Training Data: 11632 articles
+Training Set: 15358 samples
+Test Set: 2327 samples
+Features: 5000
+
               Model  Accuracy  Precision   Recall  F1-Score
-        Naive Bayes  0.857327   0.857599 0.857327  0.857301
-      Random Forest  0.844005   0.844008 0.844005  0.844005
-Logistic Regression  0.893855   0.894098 0.893855  0.893838
-                SVM  0.902450   0.902772 0.902450  0.902429
+        Naive Bayes  0.850021   0.850503 0.850021  0.849971
+      Random Forest  0.863773   0.863940 0.863773  0.863757
+Logistic Regression  0.900301   0.900376 0.900301  0.900296
+                SVM  0.896433   0.896441 0.896433  0.896433

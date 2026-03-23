@@ -27,6 +27,33 @@ fact_checker: Any = None
 model_loaded: bool = False
 current_model_name = "Ensemble"
 model_weights: Dict[str, float] = {}
+# Populated from models/inference_thresholds.json after training (Phase 3); env vars override.
+inference_thresholds: Dict[str, Any] = {}
+
+
+def _uncertainty_thresholds() -> Tuple[float, float]:
+    """Prefer explicit env; else tuned values from inference_thresholds.json; else defaults."""
+
+    def pick(env_name: str, file_key: str, default: float) -> float:
+        raw = os.getenv(env_name)
+        if raw is not None and str(raw).strip() != "":
+            return float(raw)
+        v = inference_thresholds.get(file_key)
+        if v is not None and str(v).strip() != "":
+            return float(v)
+        return default
+
+    default_conf = 60.0
+    default_gap = 8.0
+    conf = pick("UNCERTAINTY_CONFIDENCE_THRESHOLD", "uncertainty_confidence_threshold", default_conf)
+    gap = pick("UNCERTAINTY_GAP_THRESHOLD", "uncertainty_gap_threshold", default_gap)
+    return conf, gap
+
+
+def _uncertainty_thresholds_for_short() -> Tuple[float, float]:
+    """Stricter thresholds for short text (YouTube title+desc) to avoid overconfidence."""
+    conf, gap = _uncertainty_thresholds()
+    return max(conf, 65.0), max(gap, 10.0)
 
 
 def load_all_models() -> bool:
@@ -34,7 +61,7 @@ def load_all_models() -> bool:
     Load your trained ensemble models + shared TF-IDF vectorizer.
     Kept consistent with the existing `app.py` logic.
     """
-    global models, vectorizer, fact_checker, model_loaded, model_weights
+    global models, vectorizer, fact_checker, model_loaded, model_weights, inference_thresholds
 
     try:
         vectorizer_path = os.path.join(config.MODELS_DIR, "vectorizer.joblib")
@@ -85,6 +112,18 @@ def load_all_models() -> bool:
             # Equal weights fallback
             for model_name in models.keys():
                 model_weights[model_name] = 1.0
+
+        thr_path = os.path.join(config.MODELS_DIR, "inference_thresholds.json")
+        if os.path.exists(thr_path):
+            try:
+                with open(thr_path, "r", encoding="utf-8") as tf:
+                    inference_thresholds = json.load(tf)
+                print("[OK] Loaded inference_thresholds.json (Phase 3)")
+            except Exception as e:
+                print(f"[WARN] Could not load inference_thresholds.json: {e}")
+                inference_thresholds = {}
+        else:
+            inference_thresholds = {}
 
         # Initialize fact checker (optional)
         fact_checker = None
@@ -144,7 +183,13 @@ def validate_input(text: str, preprocessor: TextPreprocessor) -> Tuple[bool, str
     return True, "", warning
 
 
-def predict_text(*, text: str, fact_check_mode: str = "wikipedia", use_ensemble: bool = True) -> Dict[str, Any]:
+def predict_text(
+    *,
+    text: str,
+    fact_check_mode: str = "wikipedia",
+    use_ensemble: bool = True,
+    is_short_text: Optional[bool] = None,
+) -> Dict[str, Any]:
     """
     Core prediction path.
     Preserves the ensemble voting + (optional) fact-check override behavior.
@@ -249,9 +294,12 @@ def predict_text(*, text: str, fact_check_mode: str = "wikipedia", use_ensemble:
             final_confidence = max(avg_fake_confidence, avg_real_confidence)
             decision_type = "Tie-Breaker Fallback"
 
-    # Uncertainty thresholding (for safer real-world behavior).
-    uncertainty_threshold = float(os.getenv("UNCERTAINTY_CONFIDENCE_THRESHOLD", "60"))
-    uncertainty_gap_threshold = float(os.getenv("UNCERTAINTY_GAP_THRESHOLD", "8"))
+    # Uncertainty thresholding (stricter for short/YouTube text to avoid overconfidence).
+    if is_short_text is None:
+        is_short_text = len(text) < 900
+    uncertainty_threshold, uncertainty_gap_threshold = (
+        _uncertainty_thresholds_for_short() if is_short_text else _uncertainty_thresholds()
+    )
     is_uncertain = bool(final_confidence < uncertainty_threshold or prob_gap < uncertainty_gap_threshold)
     if is_uncertain:
         final_prediction = "UNCERTAIN"

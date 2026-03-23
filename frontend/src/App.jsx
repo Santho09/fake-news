@@ -6,6 +6,8 @@ import Login from "./pages/Login.jsx";
 import Signup from "./pages/Signup.jsx";
 import UserDashboard from "./pages/UserDashboard.jsx";
 import AdminDashboard from "./pages/AdminDashboard.jsx";
+import Landing from "./pages/Landing.jsx";
+import ForgotPassword from "./pages/ForgotPassword.jsx";
 
 function RequireAuth({ role, children }) {
   const storedRole = localStorage.getItem("role");
@@ -20,6 +22,16 @@ function RequireAuth({ role, children }) {
 export default function App() {
   const location = useLocation();
   const [bootOk, setBootOk] = useState(false);
+  const [theme, setTheme] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark") return saved;
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  });
+
+  useEffect(() => {
+    document.body.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+  }, [theme]);
 
   // Lightweight boot: if token exists, keep app running; backend role comes from stored role.
   useEffect(() => {
@@ -49,6 +61,15 @@ export default function App() {
 
   return (
     <div className="appShell">
+      <button
+        type="button"
+        className="themeToggle"
+        onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
+        aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+        title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+      >
+        {theme === "dark" ? "Light mode" : "Dark mode"}
+      </button>
       <Routes location={location} key={location.pathname}>
         <Route
           path="/"
@@ -60,12 +81,15 @@ export default function App() {
                 <Navigate to="/user" replace />
               )
             ) : (
-              <Navigate to="/login" replace />
+              <Landing />
             )
           }
         />
+        <Route path="/home" element={<Landing />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/reset-password" element={<ForgotPassword />} />
         <Route
           path="/user"
           element={

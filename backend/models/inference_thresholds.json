@@ -1,0 +1,6 @@
+{
+  "uncertainty_confidence_threshold": 80.0,
+  "uncertainty_gap_threshold": 20.0,
+  "_source": "validation_grid_search",
+  "_val_macro_f1_non_uncertain": 0.97017
+}
